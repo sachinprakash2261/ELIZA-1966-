@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELIZA Demo (1966) -- How the First Chatbot Worked</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f0f1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        h1 { font-size: 2rem; font-weight: 800; text-align: center; margin-bottom: 4px; }
+        .subtitle { color: #94a3b8; text-align: center; margin-bottom: 32px; font-size: 0.95rem; }
+        .accent { color: #8b5cf6; }
+
+        /* ── Layout: Chat left, Code right ── */
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            max-width: 1100px;
+            width: 100%;
+        }
+
+        .panel {
+            background: #1a1a2e;
+            border: 1px solid #2d2d4a;
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #2d2d4a;
+            font-weight: 700;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ── Chat Panel ── */
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 350px;
+            max-height: 450px;
+        }
+        .msg {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 0.92rem;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .msg.eliza {
+            background: #2d2d4a;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .msg.user {
+            background: #7c3aed;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .msg .label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+            opacity: 0.6;
+        }
+
+        .chat-input {
+            display: flex;
+            border-top: 1px solid #2d2d4a;
+        }
+        .chat-input input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 16px 20px;
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        .chat-input input::placeholder { color: #64748b; }
+        .chat-input button {
+            padding: 16px 24px;
+            background: #7c3aed;
+            color: white;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: background 0.2s;
+        }
+        .chat-input button:hover { background: #6d28d9; }
+
+        /* ── Code Panel ── */
+        .code-area {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            min-height: 350px;
+            max-height: 450px;
+        }
+        pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.9;
+            white-space: pre;
+            color: #c9d1d9;
+        }
+        .cm { color: #6a737d; }
+        .kw { color: #ff7b72; }
+        .str { color: #a5d6ff; }
+        .fn { color: #d2a8ff; }
+        .hl {
+            background: rgba(139, 92, 246, 0.15);
+            display: inline;
+            border-radius: 3px;
+            padding: 1px 0;
+            transition: background 0.5s;
+        }
+
+        /* ── Try These ── */
+        .suggestions {
+            max-width: 1100px;
+            width: 100%;
+            margin-top: 24px;
+        }
+        .suggestions h3 {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #8b5cf6;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        .suggestion-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 8px;
+        }
+        .sug-btn {
+            padding: 12px 16px;
+            background: #1a1a2e;
+            border: 1px solid #2d2d4a;
+            border-radius: 10px;
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+        }
+        .sug-btn:hover {
+            border-color: #8b5cf6;
+            background: rgba(139, 92, 246, 0.08);
+        }
+        .sug-btn .sug-label {
+            font-size: 0.7rem;
+            color: #10b981;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .sug-btn.fail .sug-label { color: #ef4444; }
+
+        /* ── Point Box ── */
+        .point-box {
+            max-width: 1100px;
+            width: 100%;
+            margin-top: 24px;
+            background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(236,72,153,0.08));
+            border: 1px solid rgba(139,92,246,0.25);
+            border-radius: 16px;
+            padding: 24px;
+        }
+        .point-box h3 { font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
+        .point-box ul { list-style: none; }
+        .point-box li { padding: 6px 0; padding-left: 20px; position: relative; font-size: 0.9rem; color: #94a3b8; }
+        .point-box li::before { content: ''; position: absolute; left: 0; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: #8b5cf6; }
+
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>&#x1F916; <span class="accent">ELIZA</span> (1966)</h1>
+<p class="subtitle">The world's first chatbot. Try talking to it -- then look at the code to see <em>exactly</em> how it works.</p>
+
+<div class="container">
+    <!-- Chat Panel -->
+    <div class="panel">
+        <div class="panel-header">&#x1F4AC; Chat with ELIZA</div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="msg eliza">
+                <div class="label">ELIZA</div>
+                Hello. I am ELIZA, a therapist from 1966. How are you feeling today?
+            </div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="userInput" placeholder="Type something to ELIZA..." autocomplete="off">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <!-- Code Panel -->
+    <div class="panel">
+        <div class="panel-header">&#x1F4DD; The Entire "Brain" (that's it, really)</div>
+        <div class="code-area">
+<pre>
+<span class="cm">// This is ELIZA's ENTIRE intelligence.</span>
+<span class="cm">// No AI. No neural networks. Just IF/ELSE.</span>
+
+<span class="kw">function</span> <span class="fn">eliza</span>(input) {
+
+    <span class="cm">// Convert to lowercase so "SAD" and "sad" both work</span>
+    input = input.<span class="fn">toLowerCase</span>();
+
+    <span class="cm">// Rule 1: User mentions feeling something</span>
+    <span id="hl1" class=""><span class="kw">if</span> (input.<span class="fn">includes</span>(<span class="str">"i feel"</span>)) {
+        <span class="kw">var</span> emotion = <span class="fn">getWordsAfter</span>(input, <span class="str">"i feel"</span>);
+        <span class="kw">return</span> <span class="str">"Why do you feel "</span> + emotion + <span class="str">"?"</span>;
+    }</span>
+
+    <span class="cm">// Rule 2: User mentions their mother</span>
+    <span id="hl2" class=""><span class="kw">if</span> (input.<span class="fn">includes</span>(<span class="str">"mother"</span>) || input.<span class="fn">includes</span>(<span class="str">"mom"</span>)) {
+        <span class="kw">return</span> <span class="str">"Tell me more about your family."</span>;
+    }</span>
+
+    <span class="cm">// Rule 3: User mentions being sad or depressed</span>
+    <span id="hl3" class=""><span class="kw">if</span> (input.<span class="fn">includes</span>(<span class="str">"sad"</span>) || input.<span class="fn">includes</span>(<span class="str">"depressed"</span>)) {
+        <span class="kw">return</span> <span class="str">"I'm sorry to hear that. What makes you sad?"</span>;
+    }</span>
+
+    <span class="cm">// Rule 4: User says yes or no</span>
+    <span id="hl4" class=""><span class="kw">if</span> (input === <span class="str">"yes"</span> || input === <span class="str">"no"</span>) {
+        <span class="kw">return</span> <span class="str">"Can you elaborate on that?"</span>;
+    }</span>
+
+    <span class="cm">// No rule matched? Generic fallback.</span>
+    <span id="hl5" class=""><span class="kw">return</span> <span class="str">"Please go on."</span>;</span>
+    <span class="cm">// ^ This is the trick. When ELIZA doesn't</span>
+    <span class="cm">//   understand, it pretends to listen.</span>
+    <span class="cm">//   People thought it was being thoughtful!</span>
+}
+</pre>
+        </div>
+    </div>
+</div>
+
+<!-- Suggestions -->
+<div class="suggestions">
+    <h3>Try these -- watch which rule lights up in the code</h3>
+    <div class="suggestion-grid">
+        <button class="sug-btn" onclick="trySuggestion('I feel anxious about my exams')">
+            <div class="sug-label">Rule 1: "I feel..."</div>
+            "I feel anxious about my exams"
+        </button>
+        <button class="sug-btn" onclick="trySuggestion('My mother never listens to me')">
+            <div class="sug-label">Rule 2: "mother/mom"</div>
+            "My mother never listens to me"
+        </button>
+        <button class="sug-btn" onclick="trySuggestion('I am so sad lately')">
+            <div class="sug-label">Rule 3: "sad/depressed"</div>
+            "I am so sad lately"
+        </button>
+        <button class="sug-btn fail" onclick="trySuggestion('What is the capital of France?')">
+            <div class="sug-label">No rule matches -- watch it fail</div>
+            "What is the capital of France?"
+        </button>
+        <button class="sug-btn fail" onclick="trySuggestion('Can you help me write Python code?')">
+            <div class="sug-label">No rule matches -- generic fallback</div>
+            "Can you help me write Python code?"
+        </button>
+    </div>
+</div>
+
+<!-- Teaching Point -->
+<div class="point-box">
+    <h3>&#x1F3AF; The Point of This Demo</h3>
+    <ul>
+        <li><strong>ELIZA has exactly 4 rules + 1 fallback.</strong> That's the entire "AI." No learning, no memory, no understanding.</li>
+        <li><strong>Same input = same output, every time.</strong> Try typing "I feel sad" twice. You'll get the exact same response. ChatGPT would give a different answer each time.</li>
+        <li><strong>The fallback is the trick.</strong> When ELIZA doesn't understand (which is most of the time), it says "Please go on" -- and people thought it was being a thoughtful therapist!</li>
+        <li><strong>Compare this to ChatGPT:</strong> GPT-4 has ~1.8 trillion parameters and was trained on the entire internet. ELIZA has 4 if-statements. That's 60 years of progress.</li>
+    </ul>
+</div>
+
+<script>
+// ════════════════════════════════════════
+// ELIZA's brain. This is it. Really.
+// ════════════════════════════════════════
+
+function elizaResponse(input) {
+    input = input.toLowerCase().trim();
+
+    // Rule 1: "I feel ..."
+    if (input.includes("i feel")) {
+        highlightRule("hl1");
+        var after = input.split("i feel")[1].trim();
+        if (after.length === 0) after = "that way";
+        return "Why do you feel " + after + "?";
+    }
+
+    // Rule 2: mother / mom / family
+    if (input.includes("mother") || input.includes("mom") || input.includes("father") || input.includes("dad")) {
+        highlightRule("hl2");
+        return "Tell me more about your family.";
+    }
+
+    // Rule 3: sad / depressed / unhappy
+    if (input.includes("sad") || input.includes("depressed") || input.includes("unhappy")) {
+        highlightRule("hl3");
+        return "I'm sorry to hear that. What makes you feel this way?";
+    }
+
+    // Rule 4: yes / no
+    if (input === "yes" || input === "no") {
+        highlightRule("hl4");
+        return "Can you elaborate on that?";
+    }
+
+    // Fallback: no rule matched
+    highlightRule("hl5");
+    var fallbacks = [
+        "Please go on.",
+        "Can you tell me more?",
+        "I see. Please continue.",
+        "Interesting. Go on."
+    ];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+}
+
+// ════════════════════════════════════════
+// Chat UI (not part of ELIZA logic)
+// ════════════════════════════════════════
+
+function sendMessage() {
+    var inputEl = document.getElementById("userInput");
+    var text = inputEl.value.trim();
+    if (!text) return;
+    inputEl.value = "";
+
+    addMessage(text, "user");
+
+    setTimeout(function() {
+        var reply = elizaResponse(text);
+        addMessage(reply, "eliza");
+    }, 400 + Math.random() * 400);
+}
+
+function addMessage(text, sender) {
+    var chat = document.getElementById("chatMessages");
+    var div = document.createElement("div");
+    div.className = "msg " + sender;
+    div.innerHTML = '<div class="label">' + (sender === "eliza" ? "ELIZA" : "YOU") + '</div>' + text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function trySuggestion(text) {
+    document.getElementById("userInput").value = text;
+    sendMessage();
+}
+
+// Highlight the matching rule in the code panel
+function highlightRule(id) {
+    // Clear all highlights
+    ["hl1","hl2","hl3","hl4","hl5"].forEach(function(h) {
+        document.getElementById(h).className = "";
+    });
+    // Highlight the matched one
+    var el = document.getElementById(id);
+    el.className = "hl";
+    // Scroll code panel to show highlighted rule
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// Enter key to send
+document.getElementById("userInput").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") sendMessage();
+});
+</script>
+
+</body>
+</html>
